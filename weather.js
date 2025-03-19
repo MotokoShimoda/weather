@@ -1,68 +1,78 @@
-document.addEventListener("DOMContentLoaded", () => {
-  const citySelect = document.getElementById("city-select");
-  const getWeatherButton = document.getElementById("get-weather");
+async function fetchWeather() {
+  const cityCode = document.getElementById("city-select").value;
+  if (!cityCode) {
+    alert("都市を選択してください。");
+    return;
+  }
 
-  // 天気データを表示
-  const displayWeather = (weather) => {
-    const publishingOfficeCell = document.querySelector("#publishingOffice td");
-    const reportDatetimeCell = document.querySelector("#reportDatetime td");
-    const targetAreaCell = document.querySelector("#targetArea td");
-    const todayHighTemperatureCell = document.querySelector(
-      "#todayHighTemperature td"
-    );
-    const todayLowTemperatureCell = document.querySelector(
-      "#todayLowTemperature td"
-    );
-    const todayCell = document.querySelector("#today td");
-    const tomorrowCell = document.querySelector("#tomorrow td");
-    const dayAfterTomorrowCell = document.querySelector("#dayAfterTomorrow td");
+  const url = `https://www.jma.go.jp/bosai/forecast/data/forecast/${cityCode}.json`;
 
-    //[0] に天気、[1] に温度情報
-    const areaInfo = weather.timeSeries[0].areas[0];
-    const temperatureInfo = weather.timeSeries[1]?.areas[0];
+  try {
+    const response = await fetch(url);
+    if (!response.ok) throw new Error("データの取得に失敗しました");
 
-    publishingOfficeCell.textContent = weather.publishingOffice;
-    reportDatetimeCell.textContent = new Date(
-      weather.reportDatetime
-    ).toLocaleString();
-    targetAreaCell.textContent = areaInfo.area.name;
+    const weatherData = await response.json();
 
-    todayCell.textContent = areaInfo.weathers[0] || "情報なし";
-    tomorrowCell.textContent = areaInfo.weathers[1] || "情報なし";
-    dayAfterTomorrowCell.textContent = areaInfo.weathers[2] || "情報なし";
+    // 天気情報の取得（weatherData[0]）
+    const forecast = weatherData[0];
 
-    //[1] を最高気温、[0] を最低気温
-    todayHighTemperatureCell.textContent = temperatureInfo?.temps[1]
-      ? temperatureInfo.temps[1] + "℃"
-      : "情報なし";
-    todayLowTemperatureCell.textContent = temperatureInfo?.temps[0]
-      ? temperatureInfo.temps[0] + "℃"
-      : "情報なし";
-  };
+    // 気温情報の取得（weatherData[1]）
+    const tempData = weatherData[1];
 
-  const fetchWeather = async (cityCode) => {
-    const apiUrl = `https://www.jma.go.jp/bosai/forecast/data/forecast/${cityCode}.json`;
+    let todayHigh = "情報なし";
+    let todayLow = "情報なし";
 
-    try {
-      const response = await fetch(apiUrl);
-      if (!response.ok) {
-        throw new Error(`HTTPエラー! ステータス: ${response.status}`);
-      }
-      const weatherData = await response.json();
-      displayWeather(weatherData[0]);
-    } catch (error) {
-      alert("天気データの取得に失敗しました。再度お試しください。");
-      console.error(error);
+    // 気温情報の抽出
+    if (tempData && tempData.timeSeries) {
+      tempData.timeSeries.forEach((series) => {
+        if (series.elements) {
+          series.elements.forEach((element) => {
+            if (element.elementName === "T") {
+              // 気温データ
+              const temps = element.values;
+              if (temps.length >= 2) {
+                todayHigh = temps[1] + "℃"; // 今日の最高気温
+                todayLow = temps[0] + "℃"; // 今日の最低気温
+              }
+            }
+          });
+        }
+      });
     }
-  };
 
-  // ボタンのクリックイベント
-  getWeatherButton.addEventListener("click", () => {
-    const cityCode = citySelect.value;
-    if (!cityCode) {
-      alert("都市を選択してください。");
-      return;
-    }
-    fetchWeather(cityCode);
-  });
-});
+    displayWeather(forecast, todayHigh, todayLow);
+  } catch (error) {
+    console.error("エラー:", error);
+    alert("天気データの取得に失敗しました。再度お試しください。");
+  }
+}
+
+// 天気情報を画面に表示する関数
+function displayWeather(forecast, highTemp, lowTemp) {
+  const timeSeries = forecast.timeSeries;
+  if (!timeSeries || timeSeries.length === 0) {
+    alert("天気データが取得できませんでした。");
+    return;
+  }
+
+  const todayWeather = timeSeries[0].areas[0].weathers[0] || "情報なし";
+  const tomorrowWeather = timeSeries[0].areas[1]?.weathers[0] || "情報なし";
+  const dayAfterTomorrowWeather =
+    timeSeries[0].areas[2]?.weathers[0] || "情報なし";
+
+  document.querySelector("#publishingOffice td").textContent =
+    forecast.publishingOffice || "情報なし";
+  document.querySelector("#reportDatetime td").textContent =
+    forecast.reportDatetime || "情報なし";
+  document.querySelector("#targetArea td").textContent =
+    timeSeries[0].areas[0].area.name || "情報なし";
+  document.querySelector("#todayHighTemperature td").textContent = highTemp;
+  document.querySelector("#todayLowTemperature td").textContent = lowTemp;
+  document.querySelector("#today td").textContent = todayWeather;
+  document.querySelector("#tomorrow td").textContent = tomorrowWeather;
+  document.querySelector("#dayAfterTomorrow td").textContent =
+    dayAfterTomorrowWeather;
+}
+
+// イベントリスナーを追加
+document.getElementById("get-weather").addEventListener("click", fetchWeather);
